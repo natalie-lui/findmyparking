@@ -2,11 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''; // Use service key for seeding to bypass RLS if needed, or just anon if policies allow
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
-// Using a separate client with service key if available, otherwise fall back (might fail if RLS is on)
-// For this demo, we assume the user might not have set up RLS yet or allowed anon inserts for testing.
-// Ideally, use a service role key in a real backend script.
 const supabase = createClient(supabaseUrl, supabaseServiceKey || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
 const UCI_COORDS = { lat: 33.6405, lng: -117.8443 };
@@ -61,16 +58,8 @@ const MOCK_SPOTS = [
 
 export async function GET() {
     try {
-        // 1. Clear existing spots (optional)
-        // await supabase.from('parking_spots').delete().neq('id', '00000000-0000-0000-0000-000000000000'); 
 
-        // 2. Insert Mock Data
-        // Note: PostGIS `ST_Point` isn't directly supported by Supabase JS client standard insert if we just pass a string for geography column? 
-        // Usually Supabase handles WKT (Well-Known Text) for geometry/geography columns if configured, or we might need a raw query.
-        // Let's try direct insert with WKT string. If that fails, we use rpc.
 
-        // Actually, Supabase/PostgREST supports WKT. "POINT(-117.8443 33.6405)"
-        // We generated WKT above.
 
         const { data, error } = await supabase.from('parking_spots').insert(MOCK_SPOTS).select();
 

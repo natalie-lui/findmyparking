@@ -14,35 +14,49 @@ A personalized parking recommendation engine that uses real-time context (Weathe
 -   **Database**: Supabase (PostgreSQL + PostGIS).
 -   **External APIs**: OpenWeatherMap, Mapbox Directions.
 
-## Setup Instructions
+## Installation & Setup
 
-### 1. Environment Variables
-Rename `.env.local.example` to `.env.local` and fill in your keys:
+### 1. Prerequisites
+-   [Node.js](https://nodejs.org/) (v18 or higher)
+-   [Git](https://git-scm.com/)
+
+### 2. Clone and Install
+```bash
+git clone https://github.com/annahe04/findmyparking.git
+cd findmyparking
+npm install
+```
+
+### 3. Environment Variables
+Create a `.env.local` file in the root directory:
 ```bash
 cp .env.local.example .env.local
 ```
-You will need:
--   `NEXT_PUBLIC_SUPABASE_URL` & `NEXT_PUBLIC_SUPABASE_ANON_KEY` (from Supabase Dashboard)
--   `OPENWEATHER_API_KEY` (optional, falls back to mock)
--   `MAPBOX_ACCESS_TOKEN` (optional, falls back to mock)
+Fill in the keys in `.env.local`:
+-   `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase Project URL.
+-   `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Your Supabase Anon Public Key.
+-   `OPENWEATHER_API_KEY`: (Optional) Free key from [OpenWeatherMap](https://openweathermap.org/).
+-   `MAPBOX_ACCESS_TOKEN`: (Optional) Free token from [Mapbox](https://www.mapbox.com/).
 
-### 2. Database Setup (Supabase)
-Run the SQL found in [`supabase/schema.sql`](supabase/schema.sql) in your Supabase SQL Editor.
-This will create the `parking_spots` table and `nearby_spots` function.
+### 4. Database Setup (Supabase)
+1.  Create a new project at [supabase.com](https://supabase.com).
+2.  Go to the **SQL Editor** (sidebar icon).
+3.  Copy the contents of [`supabase/schema.sql`](supabase/schema.sql) and run it.
+    *   This enables PostGIS and creates the `users` and `parking_spots` tables.
 
-### 3. Seed Data
-After setting up the database and environment variables, run the seed script by visiting the API route in your browser or via curl:
-```bash
-curl http://localhost:3000/api/seed
-```
-This will populate the database with mock parking spots around UCI.
+### 5. Seed Data
+Populate the database with mock parking spots around UCI:
+1.  Start the server: `npm run dev`
+2.  Visit this URL in your browser: [http://localhost:3000/api/seed](http://localhost:3000/api/seed)
+    *   You should see `{"message": "Seeding successful", ...}`.
 
-### 4. Run Development Server
+### 6. Run Application
 ```bash
 npm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000) to view the application.
 
-## Testing Scenarios
-1.  **Rainy Day**: Changes recommendations to favor covered parking (simulated if no API key or actual rain).
-2.  **Budget User**: Set "Max Cost" low in settings -> Cheap spots ranked higher.
+## Usage Scenarios to Try
+1.  **Simulate Rain**: In `src/lib/weather.ts`, force `return { condition: 'Rain', ... }`. Covered spots will rank higher.
+2.  **Budget User**: Click the Settings (gear icon), set "Max Cost" to $1.50. Cheaper spots will rank #1.
+3.  **Traffic**: Use Mapbox keys to see traffic-weighted ranking (spots closer in *time* rank higher).
