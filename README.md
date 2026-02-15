@@ -34,10 +34,8 @@ pip install -r python_app/requirements.txt
 ```
 
 ### 3. Environment Variables
-Create a `.env.local` file in the root directory:
-```bash
-cp .env.local.example .env.local
-```
+Create a `.env.local` file in the root directory
+
 Fill in the keys in `.env.local`:
 -   `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase Project URL.
 -   `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Your Supabase Anon Public Key.
