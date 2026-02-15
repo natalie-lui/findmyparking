@@ -1,0 +1,6 @@
+streamlit
+supabase
+requests
+pandas
+pydeck
+python-dotenv

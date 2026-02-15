@@ -1,0 +1,61 @@
+import os
+import requests
+from dotenv import load_dotenv
+
+load_dotenv('.env.local')
+
+MAPBOX_ACCESS_TOKEN = os.environ.get("MAPBOX_ACCESS_TOKEN")
+
+def get_travel_time(start_lat: float, start_lng: float, end_lat: float, end_lng: float):
+    """
+    Fetches travel time from Mapbox Directions API.
+    Returns duration (seconds), distance (meters), and traffic congestion level.
+    """
+    if not MAPBOX_ACCESS_TOKEN:
+        # Mock Data: Just assume 30km/h average speed Euclidean distance
+        # 1 deg lat approx 111km. Simple Euclidean for mock.
+        dist_deg = ((start_lat - end_lat)**2 + (start_lng - end_lng)**2)**0.5
+        dist_km = dist_deg * 111
+        duration_hours = dist_km / 30
+        duration_seconds = duration_hours * 3600
+        
+        return {
+            "duration": int(duration_seconds),
+            "distance": int(dist_km * 1000),
+            "traffic_congestion": "low"
+        }
+
+    try:
+        url = f"https://api.mapbox.com/directions/v5/mapbox/driving-traffic/{start_lng},{start_lat};{end_lng},{end_lat}?access_token={MAPBOX_ACCESS_TOKEN}"
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+
+        if not data.get('routes'):
+            return None
+
+        route = data['routes'][0]
+        duration = route['duration'] # seconds
+        distance = route['distance'] # meters
+        
+        # Simple congestion heuristic: compare duration vs typical duration (if available)
+        # or just use speed: < 15km/h is heavy?
+        speed_mps = distance / duration if duration > 0 else 10
+        speed_kmh = speed_mps * 3.6
+        
+        congestion = "low"
+        if speed_kmh < 15:
+            congestion = "severe"
+        elif speed_kmh < 30:
+            congestion = "heavy"
+        elif speed_kmh < 50:
+            congestion = "moderate"
+
+        return {
+            "duration": duration,
+            "distance": distance,
+            "traffic_congestion": congestion
+        }
+    except Exception as e:
+        print(f"Error fetching traffic: {e}")
+        return None
