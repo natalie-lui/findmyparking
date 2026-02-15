@@ -1,9 +1,9 @@
-# FindMyParking - Python/Streamlit Version
+# FindMyParking
 
-A personalized parking recommendation engine that uses real-time context (Weather, Traffic) and user preferences to suggest the best parking spots.
+A personalized parking recommendation engine that uses real-time context such as weather and traffic, and user preferences to suggest the best parking spots.
 
 ## Features
--   **Personalized Ranking**: Algorithm balances cost, distance, availability, and user preferences.
+-   **Personalized Ranking**: Uses cost, distance, availability, and user preferences to rank parking spots.
 -   **Real-time Context**: Integrates OpenWeatherMap (Rain detection) and Mapbox (Traffic) to adjust recommendations dynamically.
 -   **Interactive Map**: Visualizes user location and recommended spots using PyDeck.
 -   **User Preferences**: Customize priorities (Max Cost, Covered Parking).
