@@ -57,6 +57,3 @@ source venv/bin/activate
 streamlit run python_app/app.py
 ```
 Open the URL shown in your terminal (usually [http://localhost:8501](http://localhost:8501)) to view the application.
-
-## Troubleshooting
--   **ModuleNotFoundError**: Ensure you are running `streamlit` from inside your virtual environment. If using Anaconda, make sure `pip install` ran in the same environment as `streamlit`. Using the `venv` steps above avoids this.
