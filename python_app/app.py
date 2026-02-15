@@ -148,7 +148,9 @@ if not df.empty:
 
 st.subheader("Recommended Spots")
 if not df.empty:
-    for idx, (index, row) in enumerate(df.iterrows(), 1):
+    # Show only top 5 unique spots
+    top_5_df = df.head(5)
+    for idx, (index, row) in enumerate(top_5_df.iterrows(), 1):
         with st.expander(f"#{idx} - {row['name']} (Score: {row['score']})"):
             st.write(f"**Cost**: {row['cost']}")
             st.write(f"**Travel Time**: {row['time']}")
