@@ -12,7 +12,6 @@ def get_weather(lat: float, lon: float):
     Returns a dict with condition, description, temp, and is_raining boolean.
     """
     if not OPENWEATHER_API_KEY:
-        # Mock Data Fallback
         return {
             "condition": "Clear",
             "description": "Clear sky (Mock)",

@@ -12,8 +12,6 @@ def get_travel_time(start_lat: float, start_lng: float, end_lat: float, end_lng:
     Returns duration (seconds), distance (meters), and traffic congestion level.
     """
     if not MAPBOX_ACCESS_TOKEN:
-        # Mock Data: Just assume 30km/h average speed Euclidean distance
-        # 1 deg lat approx 111km. Simple Euclidean for mock.
         dist_deg = ((start_lat - end_lat)**2 + (start_lng - end_lng)**2)**0.5
         dist_km = dist_deg * 111
         duration_hours = dist_km / 30
@@ -38,8 +36,6 @@ def get_travel_time(start_lat: float, start_lng: float, end_lat: float, end_lng:
         duration = route['duration'] # seconds
         distance = route['distance'] # meters
         
-        # Simple congestion heuristic: compare duration vs typical duration (if available)
-        # or just use speed: < 15km/h is heavy?
         speed_mps = distance / duration if duration > 0 else 10
         speed_kmh = speed_mps * 3.6
         

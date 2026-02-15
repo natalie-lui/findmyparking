@@ -2,8 +2,7 @@ import os
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
-# Load environment variables from .env.local (or .env)
-# We look for .env.local in the parent directory or current directory
+
 load_dotenv('.env.local')
 
 url: str = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
