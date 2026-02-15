@@ -110,7 +110,8 @@ for spot in spots:
         else: score -= 20
         
     if pref_covered and is_covered: score += 15
-    if cost > max_cost: score -= 50
+    if cost > max_cost:
+        continue # Skip spots that are too expensive
 
     ranked_spots.append({
         "name": spot['name'],
@@ -147,8 +148,8 @@ if not df.empty:
 
 st.subheader("Recommended Spots")
 if not df.empty:
-    for idx, row in df.iterrows():
-        with st.expander(f"#{idx+1 if isinstance(idx, int) else '?'} - {row['name']} (Score: {row['score']})"):
+    for idx, (index, row) in enumerate(df.iterrows(), 1):
+        with st.expander(f"#{idx} - {row['name']} (Score: {row['score']})"):
             st.write(f"**Cost**: {row['cost']}")
             st.write(f"**Travel Time**: {row['time']}")
             st.write(f"**Features**: {row['features']}")
