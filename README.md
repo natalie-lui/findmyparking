@@ -56,4 +56,4 @@ Make sure your virtual environment is active:
 source venv/bin/activate
 streamlit run python_app/app.py
 ```
-Open the URL shown in your terminal (usually [http://localhost:8501](http://localhost:8501)) to view the application.
+Open the URL shown in your terminal

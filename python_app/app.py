@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import struct
+import binascii
 import pydeck as pdk
 from utils.supabase_client import get_supabase_client
 from utils.weather import get_weather
@@ -43,15 +45,47 @@ if not spots:
     st.stop()
 
 # 3. Ranking Algorithm
+
+def parse_location(location_data):
+    """
+    Parses location data from Supabase/PostGIS.
+    Handles:
+    1. WKT String (e.g. "POINT(-117.8443 33.6405)")
+    2. WKB Hex String (e.g. "0101000020E6100000...")
+    Returns (longitude, latitude) as floats.
+    """
+    try:
+        if isinstance(location_data, str) and location_data.startswith("POINT"):
+            val = location_data.replace('POINT','').replace('(','').replace(')','')
+            lng, lat = map(float, val.split())
+            return lng, lat
+            
+        if isinstance(location_data, str):
+            data = binascii.unhexlify(location_data)
+
+            endian = data[0]
+            fmt = '<' if endian == 1 else '>'
+            offset = 5
+            
+            wkb_type = struct.unpack(fmt + 'I', data[1:5])[0]
+            if (wkb_type & 0x20000000):
+                offset += 4
+            
+            x = struct.unpack(fmt + 'd', data[offset:offset+8])[0]
+            y = struct.unpack(fmt + 'd', data[offset+8:offset+16])[0]
+            return x, y
+            
+    except Exception as e:
+        pass
+        
+    return None, None
+
 ranked_spots = []
 
 for spot in spots:
-
-    try:
-        wkt = spot['location']
-        val = wkt.replace('POINT','').replace('(','').replace(')','')
-        lng, lat = map(float, val.split())
-    except:
+    lng, lat = parse_location(spot['location'])
+    
+    if lat is None or lng is None:
         lat, lng = user_lat + 0.001, user_lng + 0.001 
 
     traffic = get_travel_time(user_lat, user_lng, lat, lng)
