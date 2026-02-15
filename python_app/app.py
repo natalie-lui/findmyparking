@@ -109,7 +109,8 @@ for spot in spots:
         if is_covered: score += 30
         else: score -= 20
         
-    if pref_covered and is_covered: score += 15
+    if pref_covered and not is_covered:
+        continue # Skip uncovered spots if preference is set
     if cost > max_cost:
         continue # Skip spots that are too expensive
 

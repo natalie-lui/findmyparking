@@ -250,7 +250,6 @@ spots = [
 def seed_database():
     print("Clearing existing parking spots...")
     try:
-        # Delete all rows (beware if you have production data!)
         supabase.table('parking_spots').delete().neq('id', '00000000-0000-0000-0000-000000000000').execute()
     except Exception as e:
         print(f"Error clearing data (might be empty): {e}")
