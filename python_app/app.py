@@ -6,6 +6,7 @@ import pydeck as pdk
 from utils.supabase_client import get_supabase_client
 from utils.weather import get_weather
 from utils.traffic import get_travel_time
+from utils.geocoding import geocode_address
 
 # Set page config
 st.set_page_config(page_title="FindMyParking", layout="wide")
@@ -20,6 +21,33 @@ st.sidebar.markdown("Personalized Parking Recommendations")
 user_lat = 33.6405
 user_lng = -117.8443
 st.sidebar.write(f"**Current Location:** UCI ({user_lat}, {user_lng})")
+
+# Input Destination
+st.sidebar.write("Your Destination")
+
+dest_query = st.sidebar.text_input(
+    "Enter your destination: ",
+    placeholder = "e.g. UCI Student Center"
+)
+
+suggestions = geocode_address(dest_query, user_lat, user_lng)
+
+destination = None
+dest_lat = None
+dest_lng = None
+
+if suggestions:
+    selected_place = st.sidebar.selectbox(
+        "Select a location",
+        options=suggestions,
+        format_func=lambda x: x["name"]
+    )
+
+    if selected_place:
+        dest_lat = selected_place["lat"]
+        dest_lng = selected_place["lng"]
+        st.sidebar.success(f"Selected: {selected_place['name']}")
+        destination = selected_place
 
 max_cost = st.sidebar.slider("Max Cost per Hour ($)", 0.0, 10.0, 5.0, 0.5)
 pref_covered = st.sidebar.checkbox("Prefer Covered Parking")
@@ -80,6 +108,10 @@ def parse_location(location_data):
         
     return None, None
 
+#stop ranking if destination not selected
+if dest_lat is None or dest_lng is None:
+    st.stop()
+
 ranked_spots = []
 
 for spot in spots:
@@ -88,15 +120,24 @@ for spot in spots:
     if lat is None or lng is None:
         lat, lng = user_lat + 0.001, user_lng + 0.001 
 
-    traffic = get_travel_time(user_lat, user_lng, lat, lng)
-    duration = traffic['duration'] if traffic else 0
-    distance = traffic['distance'] if traffic else 0
-    
+    #calculate travel times
+    #curr -> parking
+    traffic_to_spot = get_travel_time(user_lat, user_lng, lat, lng)
+    duration_to_spot = traffic_to_spot['duration'] if traffic_to_spot else 0
+
+    #parking -> destination
+    traffic_to_dest = get_travel_time(lat, lng, dest_lat, dest_lng)
+    duration_to_dest = traffic_to_dest['duration'] if traffic_to_dest else 0
+
+    #convert time
+    drive_minutes = duration_to_spot / 60
+    walk_minutes = duration_to_dest / 60
+    total_minutes = drive_minutes + walk_minutes
+
     score = 70 # base score
     
-    minutes = duration / 60 #distance
-    score -= minutes * 2
-    if minutes < 5: score += 10
+    score -= drive_minutes * 1.2
+    score -= walk_minutes * 2.5 #walking = penalized heavier
     
     cost = spot['cost_per_hour'] #cost
     score -= cost * 2
@@ -118,11 +159,13 @@ for spot in spots:
         "name": spot['name'],
         "score": int(score),
         "cost": f"${cost}/hr",
-        "time": f"{int(minutes)} min",
+        "drive_time": f"{int(drive_minutes)} min",
+        "walk_time": f"{int(walk_minutes)} min",
+        "total_time": f"{int(total_minutes)} min",
         "features": ", ".join(features),
         "lat": lat,
         "lon": lng,
-        "why": "Covered & Close" if is_covered and minutes < 5 else "Best Value"
+        "why": "Covered & Close" if is_covered and total_minutes < 5 else "Best Value"
     })
 
 #sorting
@@ -154,7 +197,9 @@ if not df.empty:
     for idx, (index, row) in enumerate(top_5_df.iterrows(), 1):
         with st.expander(f"#{idx} - {row['name']} (Score: {row['score']})"):
             st.write(f"**Cost**: {row['cost']}")
-            st.write(f"**Travel Time**: {row['time']}")
+            st.write(f"**Drive Time**: {row['drive_time']}")
+            st.write(f"**Walk Time**: {row['walk_time']}")
+            st.write(f"**Total Trip Time**: {row['total_time']}")
             st.write(f"**Features**: {row['features']}")
             st.write(f"**Why**: {row['why']}")
 else:
