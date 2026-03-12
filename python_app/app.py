@@ -3,10 +3,12 @@ import pandas as pd
 import struct
 import binascii
 import pydeck as pdk
+import requests
 from utils.supabase_client import get_supabase_client
 from utils.weather import get_weather
 from utils.traffic import get_travel_time
 from utils.geocoding import geocode_address
+from utils.parkingspots import get_parking_spots_near
 
 # Set page config
 st.set_page_config(page_title="FindMyParking", layout="wide")
@@ -17,38 +19,44 @@ supabase = get_supabase_client()
 st.sidebar.title("FindMyParking 🚗")
 st.sidebar.markdown("Personalized Parking Recommendations")
 
-# User Inputs
-user_lat = 33.6405
-user_lng = -117.8443
-st.sidebar.write(f"**Current Location:** UCI ({user_lat}, {user_lng})")
+#Detect User Location
+def get_user_location():
+    try:
+        resp = requests.get("https://ipinfo.io/json") #get location from ipaddress
+        data = resp.json()
+        loc = data["loc"].split(",")
+        return float(loc[0]), float(loc[1])
+    except:
+        return 33.6405, -117.8443  # fallback: UCI
+
+user_lat, user_lng = get_user_location()
+
+st.sidebar.write(f"**Current Location:** ({user_lat}, {user_lng})")
 
 # Input Destination
 st.sidebar.write("Your Destination")
 
-dest_query = st.sidebar.text_input(
-    "Enter your destination: ",
-    placeholder = "e.g. UCI Student Center"
-)
-
-suggestions = geocode_address(dest_query, user_lat, user_lng)
+dest_query = st.sidebar.text_input("Enter destination:", placeholder="e.g. UCI Student Center")
 
 destination = None
 dest_lat = None
 dest_lng = None
 
-if suggestions:
-    selected_place = st.sidebar.selectbox(
-        "Select a location",
-        options=suggestions,
-        format_func=lambda x: x["name"]
-    )
+if dest_query:
+    # fetch suggestions every time input changes
+    suggestions = geocode_address(dest_query, user_lat, user_lng)
 
-    if selected_place:
-        dest_lat = selected_place["lat"]
-        dest_lng = selected_place["lng"]
-        st.sidebar.success(f"Selected: {selected_place['name']}")
-        destination = selected_place
+    if suggestions:
+        selected = st.sidebar.selectbox(
+            "Select destination", options=suggestions, format_func=lambda x: x["name"]
+        )
+        if selected:
+            dest_lat = selected["lat"]
+            dest_lng = selected["lng"]
+            destination = selected
+            st.sidebar.success(f"Destination: {selected['name']}")
 
+#User Preferences
 max_cost = st.sidebar.slider("Max Cost per Hour ($)", 0.0, 10.0, 5.0, 0.5)
 pref_covered = st.sidebar.checkbox("Prefer Covered Parking")
 pref_accessible = st.sidebar.checkbox("Prefer Accessible Parking")
@@ -61,53 +69,17 @@ col1.metric("Weather", f"{weather['condition']}", f"{weather['temp']}°C")
 col2.metric("Rain Status", "Raining" if weather['is_raining'] else "Clear")
 
 
-try:
-    response = supabase.table('parking_spots').select("*").execute()
-    spots = response.data
-except Exception as e:
-    st.error(f"Error fetching spots: {e}")
-    spots = []
+#get parking spots
+center_lat, center_lng = (dest_lat, dest_lng) if destination else (user_lat, user_lng) #center location around destination
+spots = get_parking_spots_near(center_lat, center_lng)
+MAX_SPOTS = 50
+spots = spots[:MAX_SPOTS] #limit amount of spots
 
 if not spots:
-    st.warning("No parking spots found. Run seed script or check database.")
+    st.warning("No parking spots found nearby.")
     st.stop()
 
-# 3. Ranking Algorithm
-
-def parse_location(location_data):
-    """
-    Parses location data from Supabase/PostGIS.
-    Handles:
-    1. WKT String (e.g. "POINT(-117.8443 33.6405)")
-    2. WKB Hex String (e.g. "0101000020E6100000...")
-    Returns (longitude, latitude) as floats.
-    """
-    try:
-        if isinstance(location_data, str) and location_data.startswith("POINT"):
-            val = location_data.replace('POINT','').replace('(','').replace(')','')
-            lng, lat = map(float, val.split())
-            return lng, lat
-            
-        if isinstance(location_data, str):
-            data = binascii.unhexlify(location_data)
-
-            endian = data[0]
-            fmt = '<' if endian == 1 else '>'
-            offset = 5
-            
-            wkb_type = struct.unpack(fmt + 'I', data[1:5])[0]
-            if (wkb_type & 0x20000000):
-                offset += 4
-            
-            x = struct.unpack(fmt + 'd', data[offset:offset+8])[0]
-            y = struct.unpack(fmt + 'd', data[offset+8:offset+16])[0]
-            return x, y
-            
-    except Exception as e:
-        pass
-        
-    return None, None
-
+# Ranking Algorithm
 #stop ranking if destination not selected
 if dest_lat is None or dest_lng is None:
     st.stop()
@@ -115,7 +87,8 @@ if dest_lat is None or dest_lng is None:
 ranked_spots = []
 
 for spot in spots:
-    lng, lat = parse_location(spot['location'])
+    lng = spot['lon']
+    lat = spot['lat']
     
     if lat is None or lng is None:
         lat, lng = user_lat + 0.001, user_lng + 0.001 
@@ -172,24 +145,31 @@ for spot in spots:
 df = pd.DataFrame(ranked_spots)
 if not df.empty:
     df = df.sort_values(by="score", ascending=False)
+
+#Show Map
 st.subheader("Parking Map")
 if not df.empty:
     df['color'] = [[255, 0, 0, 160]] * len(df)
     df.at[df.index[0], 'color'] = [0, 255, 0, 200] 
+
+    df_map = df.head(20) #only render 20
     
     layer = pdk.Layer(
         "ScatterplotLayer",
-        df,
+        df_map,
         get_position=["lon", "lat"],
         get_color="color",
         get_radius=100,
         pickable=True,
     )
     
-    view_state = pdk.ViewState(latitude=user_lat, longitude=user_lng, zoom=14)
+    map_lat = df['lat'].mean()
+    map_lng = df['lon'].mean()
+    view_state = pdk.ViewState(latitude=map_lat, longitude=map_lng, zoom=14)
     r = pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip={"text": "{name}\nScore: {score}\nCost: {cost}"})
     st.pydeck_chart(r)
 
+#Show Top Recommended
 st.subheader("Recommended Spots")
 if not df.empty:
     # Show only top 5 unique spots

@@ -1,34 +1,45 @@
 import os
 import requests
-import urllib.parse
 
+GEOAPIFY_API_KEY = os.getenv("GEOAPIFY_API_KEY")
 
-MAPBOX_TOKEN = os.getenv("MAPBOX_ACCESS_TOKEN")
-
-def geocode_address(address, user_lat, user_lng):
-    #no destination inputted
+def geocode_address(address, user_lat=None, user_lng=None):
     if not address:
-        return None
-    
-    encoded_query = urllib.parse.quote(address)
-    url = f"https://api.mapbox.com/geocoding/v5/mapbox.places/{encoded_query}.json"
+        return []
+
+    url = "https://api.geoapify.com/v1/geocode/autocomplete"
     params = {
-        "access_token": MAPBOX_TOKEN,
-        "autocomplete": "true",
-        "limit": 5,
-        "proximity": f"{user_lng},{user_lat}"
+        "text": address,
+        "apiKey": GEOAPIFY_API_KEY,
+        "limit": 5
     }
 
-    response = requests.get(url, params=params)
-    data = response.json()
+    # bias by proximity if available
+    if user_lat and user_lng:
+        params["bias"] = f"proximity:{user_lng},{user_lat}"
 
-    #return coordinates
+    try:
+        resp = requests.get(url, params=params, timeout=5)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        print("Geoapify error:", e)
+        return []
+
     results = []
     for feature in data.get("features", []):
-        results.append({
-            "name": feature["place_name"],
-            "lat": feature["center"][1],
-            "lng": feature["center"][0]
-        })
+        loc = feature.get("properties", {})
+        name = loc.get("formatted")
+        lat = loc.get("lat")
+        lon = loc.get("lon")
+        if name and lat and lon:
+            results.append({
+                "name": name,
+                "lat": lat,
+                "lng": lon
+            })
+
+    # fallback: use current location
+    results.append({"name": "Use Current Location", "lat": user_lat, "lng": user_lng})
 
     return results
