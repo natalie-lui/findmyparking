@@ -4,10 +4,11 @@ import streamlit as st
 @st.cache_data(ttl=3600)
 def get_parking_spots_near(lat, lng, radius=2000):
     """
-    return parking spots near user's location using GEOAPIFY
+    generate set of spots near a destination's [lat,lng]
     """
 
     overpass_url = "https://overpass-api.de/api/interpreter"
+
     query = f"""
     [out:json];
     (
@@ -15,7 +16,7 @@ def get_parking_spots_near(lat, lng, radius=2000):
       way["amenity"="parking"](around:{radius},{lat},{lng});
       relation["amenity"="parking"](around:{radius},{lat},{lng});
     );
-    out center 25;
+    out center;
     """
 
     try:
@@ -31,7 +32,7 @@ def get_parking_spots_near(lat, lng, radius=2000):
 
     for element in data.get("elements", []):
 
-        # get lat/lng
+        # Extract coordinates
         if "lat" in element:
             el_lat = element["lat"]
             el_lon = element["lon"]
@@ -39,7 +40,7 @@ def get_parking_spots_near(lat, lng, radius=2000):
             el_lat = element["center"]["lat"]
             el_lon = element["center"]["lon"]
 
-        # remove duplicates
+        # Prevent duplicates
         coord_key = (round(el_lat, 5), round(el_lon, 5))
         if coord_key in seen:
             continue
@@ -48,31 +49,36 @@ def get_parking_spots_near(lat, lng, radius=2000):
         tags = element.get("tags", {})
         features = []
 
-        # covered parking detection
-        parking_type = tags.get("parking")
+        #detect covered parking
         covered = tags.get("covered")
+        parking_type = tags.get("parking")
 
-        if covered == "yes" or parking_type in ["multi-storey", "underground"]:
+        if covered == "yes":
             features.append("Covered")
 
-        # accessibility detection
+        elif parking_type in ["multi-storey", "underground"]:
+            features.append("Covered")
+
+        # detect accessibility
         wheelchair = tags.get("wheelchair")
 
         if wheelchair == "yes":
             features.append("Accessible")
+
         elif wheelchair == "limited":
             features.append("Partially Accessible")
 
+        # Pull parking lot name
         name = tags.get("name", "Parking Lot")
 
-        # cost detection
+        # detect cost
         cost = 0
 
         if "charge:hourly" in tags:
             try:
                 cost = float(tags["charge:hourly"])
             except:
-                pass
+                cost = 3
 
         elif "charge" in tags:
             try:
@@ -80,11 +86,11 @@ def get_parking_spots_near(lat, lng, radius=2000):
             except:
                 cost = 3
 
-        elif tags.get("fee") == "no":
-            cost = 0
-
         elif tags.get("fee") == "yes":
             cost = 3
+
+        elif tags.get("fee") == "no":
+            cost = 0
 
         spots.append({
             "name": name,

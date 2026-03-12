@@ -39,6 +39,7 @@ Create a `.env.local` file in the root directory
 Fill in the keys in `.env.local`:
 -   `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase Project URL.
 -   `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Your Supabase Anon Public Key.
+-   `GEOAPIFY_API_KEY`: Your GEOAPIFY API Key. (Free Tier)
 *(Note: Variable names kept compatible with previous setup)*
 -   `OPENWEATHER_API_KEY`: (Optional) Free key from [OpenWeatherMap](https://openweathermap.org/).
 -   `MAPBOX_ACCESS_TOKEN`: (Optional) Free token from [Mapbox](https://www.mapbox.com/).
