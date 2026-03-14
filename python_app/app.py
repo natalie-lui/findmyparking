@@ -82,8 +82,7 @@ if not spots:
 # Ranking Algorithm
 #stop ranking if destination not selected
 if dest_lat is None or dest_lng is None:
-    st.stop()
-
+    dest_lat, dest_lng = user_lat + 0.01, user_lng + 0.01 #default destination if not selected, slightly offset from current location
 ranked_spots = []
 
 for spot in spots:
