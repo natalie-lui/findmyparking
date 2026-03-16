@@ -10,6 +10,42 @@ from utils.traffic import get_travel_time
 from utils.geocoding import geocode_address
 from utils.parkingspots import get_parking_spots_near
 
+from utils.auth import sign_in, sign_up
+
+# --- Session State ---
+if "user" not in st.session_state:
+    st.session_state.user = None
+
+# --- Login Page ---
+if not st.session_state.user:
+    st.title("🚗 FindMyParking")
+    st.write("Sign in to get personalized parking recommendations.")
+
+    mode = st.radio("", ["Sign In", "Sign Up"], horizontal=True)
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+
+    if st.button(mode, type="primary"):
+        if not username or not password:
+            st.error("Please fill in both fields.")
+        else:
+            result = sign_in(username, password) if mode == "Sign In" else sign_up(username, password)
+            if result["success"]:
+                st.session_state.user = result["user"]
+                st.rerun()
+            else:
+                st.error(result["error"])
+
+    st.stop()  # Don't render the map until logged in
+
+# --- Logged in: show user in sidebar ---
+st.sidebar.success(f"👤 {st.session_state.user['email']}")
+if st.sidebar.button("Sign Out"):
+    st.session_state.user = None
+    st.rerun()
+
+st.sidebar.divider()
+
 # Set page config
 st.set_page_config(page_title="FindMyParking", layout="wide")
 

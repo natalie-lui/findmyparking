@@ -5,9 +5,9 @@ create extension if not exists postgis;
 create table if not exists users (
   id uuid primary key default gen_random_uuid(),
   email text unique,
+  password text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  preferences jsonb default '{}'::jsonb, -- e.g. { "max_cost": 10, "min_width": 2.5, "covered": true }
-  history jsonb default '[]'::jsonb -- Array of past parking spots visited
+  preferences jsonb default '{}'::jsonb -- e.g. { "max_cost": 10, "covered": true }
 );
 
 -- Parking Spots table
@@ -23,6 +23,22 @@ create table if not exists parking_spots (
   image_url text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+-- Parking History table
+create table if not exists parking_history (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references users(id) on delete cascade,
+  spot_name text not null,
+  spot_lat double precision not null,
+  spot_lon double precision not null,
+  cost_per_hour float,
+  walk_time_minutes float,
+  parked_at timestamp with time zone default now()
+);
+
+-- Index for fast per-user history lookups
+create index if not exists parking_history_user_id_index
+  on parking_history (user_id);
 
 -- Create a spatial index for fast distance queries
 create index if not exists parking_spots_geo_index
