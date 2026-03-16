@@ -11,3 +11,11 @@ def log_parking(user_id, spot):
         "cost_per_hour": spot["cost_per_hour"],
         "walk_time_minutes": spot["walk_time_minutes"],
     }).execute()
+    
+def get_user_history(user_id):
+    response = supabase.table("parking_history") \
+        .select("*") \
+        .eq("user_id", user_id) \
+        .order("parked_at", desc=True) \
+        .execute()
+    return response.data or []

@@ -9,7 +9,7 @@ from utils.weather import get_weather
 from utils.traffic import get_travel_time
 from utils.geocoding import geocode_address
 from utils.parkingspots import get_parking_spots_near
-from utils.history import log_parking
+from utils.history import log_parking, get_user_history
 from utils.auth import sign_in, sign_up
 
 # Set page config
@@ -123,6 +123,12 @@ if dest_lat is None or dest_lng is None:
     dest_lat, dest_lng = user_lat + 0.01, user_lng + 0.01 #default destination if not selected, slightly offset from current location
 ranked_spots = []
 
+# Fetch user history for personalized ranking
+history = get_user_history(st.session_state.user["id"])
+previously_used = {h["spot_name"] for h in history}
+avg_cost = sum(h["cost_per_hour"] for h in history) / len(history) if history else None
+avg_walk = sum(h["walk_time_minutes"] for h in history) / len(history) if history else None
+
 with st.spinner(f"Ranking {len(spots)} spots..."):
     for spot in spots:
         lng = spot['lon']
@@ -165,6 +171,13 @@ with st.spinner(f"Ranking {len(spots)} spots..."):
             continue # Skip uncovered spots if preference is set
         if cost > max_cost:
             continue # Skip spots that are too expensive
+        
+        if spot['name'] in previously_used:
+            score += 15 # boost spots user has parked at before
+        if avg_cost is not None:
+            score -= abs(cost - avg_cost) * 1.5 # penalize if price is far from average cost
+        if avg_walk is not None:
+            score -= abs(walk_minutes - avg_walk) * 1.0
 
         ranked_spots.append({
             "name": spot['name'],
