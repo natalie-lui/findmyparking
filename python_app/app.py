@@ -9,8 +9,11 @@ from utils.weather import get_weather
 from utils.traffic import get_travel_time
 from utils.geocoding import geocode_address
 from utils.parkingspots import get_parking_spots_near
-
+from utils.history import log_parking
 from utils.auth import sign_in, sign_up
+
+# Set page config
+st.set_page_config(page_title="FindMyParking", layout="wide")
 
 # --- Session State ---
 if "user" not in st.session_state:
@@ -45,9 +48,6 @@ if st.sidebar.button("Sign Out"):
     st.rerun()
 
 st.sidebar.divider()
-
-# Set page config
-st.set_page_config(page_title="FindMyParking", layout="wide")
 
 # Initialize Supabase
 supabase = get_supabase_client()
@@ -98,6 +98,7 @@ pref_covered = st.sidebar.checkbox("Prefer Covered Parking")
 pref_accessible = st.sidebar.checkbox("Prefer Accessible Parking")
 
 
+
 weather = get_weather(user_lat, user_lng)
 
 col1, col2, col3 = st.columns(3)
@@ -107,9 +108,10 @@ col2.metric("Rain Status", "Raining" if weather['is_raining'] else "Clear")
 
 #get parking spots
 center_lat, center_lng = (dest_lat, dest_lng) if destination else (user_lat, user_lng) #center location around destination
-spots = get_parking_spots_near(center_lat, center_lng)
-MAX_SPOTS = 50
-spots = spots[:MAX_SPOTS] #limit amount of spots
+with st.spinner("Finding nearby parking spots..."):
+    spots = get_parking_spots_near(center_lat, center_lng)
+    MAX_SPOTS = 10
+    spots = spots[:MAX_SPOTS] #limit amount of spots
 
 if not spots:
     st.warning("No parking spots found nearby.")
@@ -121,60 +123,61 @@ if dest_lat is None or dest_lng is None:
     dest_lat, dest_lng = user_lat + 0.01, user_lng + 0.01 #default destination if not selected, slightly offset from current location
 ranked_spots = []
 
-for spot in spots:
-    lng = spot['lon']
-    lat = spot['lat']
-    
-    if lat is None or lng is None:
-        lat, lng = user_lat + 0.001, user_lng + 0.001 
-
-    #calculate travel times
-    #curr -> parking
-    traffic_to_spot = get_travel_time(user_lat, user_lng, lat, lng)
-    duration_to_spot = traffic_to_spot['duration'] if traffic_to_spot else 0
-
-    #parking -> destination
-    traffic_to_dest = get_travel_time(lat, lng, dest_lat, dest_lng)
-    duration_to_dest = traffic_to_dest['duration'] if traffic_to_dest else 0
-
-    #convert time
-    drive_minutes = duration_to_spot / 60
-    walk_minutes = duration_to_dest / 60
-    total_minutes = drive_minutes + walk_minutes
-
-    score = 70 # base score
-    
-    score -= drive_minutes * 1.2
-    score -= walk_minutes * 2.5 #walking = penalized heavier
-    
-    cost = spot['cost_per_hour'] #cost
-    score -= cost * 2
-    if cost < 3: score += 5
-    
-    features = spot.get('features', []) # weather
-    is_covered = "Covered" in features
-    
-    if weather['is_raining']:
-        if is_covered: score += 30
-        else: score -= 20
+with st.spinner(f"Ranking {len(spots)} spots..."):
+    for spot in spots:
+        lng = spot['lon']
+        lat = spot['lat']
         
-    if pref_covered and not is_covered:
-        continue # Skip uncovered spots if preference is set
-    if cost > max_cost:
-        continue # Skip spots that are too expensive
+        if lat is None or lng is None:
+            lat, lng = user_lat + 0.001, user_lng + 0.001 
 
-    ranked_spots.append({
-        "name": spot['name'],
-        "score": int(score),
-        "cost": f"${cost}/hr",
-        "drive_time": f"{int(drive_minutes)} min",
-        "walk_time": f"{int(walk_minutes)} min",
-        "total_time": f"{int(total_minutes)} min",
-        "features": ", ".join(features),
-        "lat": lat,
-        "lon": lng,
-        "why": "Covered & Close" if is_covered and total_minutes < 5 else "Best Value"
-    })
+        #calculate travel times
+        #curr -> parking
+        traffic_to_spot = get_travel_time(user_lat, user_lng, lat, lng)
+        duration_to_spot = traffic_to_spot['duration'] if traffic_to_spot else 0
+
+        #parking -> destination
+        traffic_to_dest = get_travel_time(lat, lng, dest_lat, dest_lng)
+        duration_to_dest = traffic_to_dest['duration'] if traffic_to_dest else 0
+
+        #convert time
+        drive_minutes = duration_to_spot / 60
+        walk_minutes = duration_to_dest / 60
+        total_minutes = drive_minutes + walk_minutes
+
+        score = 70 # base score
+        
+        score -= drive_minutes * 1.2
+        score -= walk_minutes * 2.5 #walking = penalized heavier
+        
+        cost = spot['cost_per_hour'] #cost
+        score -= cost * 2
+        if cost < 3: score += 5
+        
+        features = spot.get('features', []) # weather
+        is_covered = "Covered" in features
+        
+        if weather['is_raining']:
+            if is_covered: score += 30
+            else: score -= 20
+            
+        if pref_covered and not is_covered:
+            continue # Skip uncovered spots if preference is set
+        if cost > max_cost:
+            continue # Skip spots that are too expensive
+
+        ranked_spots.append({
+            "name": spot['name'],
+            "score": int(score),
+            "cost": f"${cost}/hr",
+            "drive_time": f"{int(drive_minutes)} min",
+            "walk_time": f"{int(walk_minutes)} min",
+            "total_time": f"{int(total_minutes)} min",
+            "features": ", ".join(features),
+            "lat": lat,
+            "lon": lng,
+            "why": "Covered & Close" if is_covered and total_minutes < 5 else "Best Value"
+        })
 
 #sorting
 df = pd.DataFrame(ranked_spots)
@@ -217,5 +220,14 @@ if not df.empty:
             st.write(f"**Total Trip Time**: {row['total_time']}")
             st.write(f"**Features**: {row['features']}")
             st.write(f"**Why**: {row['why']}")
+            if st.button("🅿️ Park Here", key=f"park_{index}"):
+                log_parking(st.session_state.user["id"], {
+                    "name": row["name"],
+                    "lat": row["lat"],
+                    "lon": row["lon"],
+                    "cost_per_hour": float(row["cost"].replace("$", "").replace("/hr", "")),
+                    "walk_time_minutes": float(row["walk_time"].replace(" min", "")),
+                })
+                st.success(f"✅ Parked at {row['name']}! This will improve your future recommendations.")
 else:
     st.write("No spots match your criteria.")
