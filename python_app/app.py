@@ -11,6 +11,7 @@ from utils.geocoding import geocode_address
 from utils.parkingspots import get_parking_spots_near
 from utils.history import log_parking, get_user_history
 from utils.auth import sign_in, sign_up
+from utils.reverse_geocode import reverse_geocode
 
 # Set page config
 st.set_page_config(page_title="FindMyParking", layout="wide")
@@ -189,6 +190,7 @@ with st.spinner(f"Ranking {len(spots)} spots..."):
             "features": ", ".join(features),
             "lat": lat,
             "lon": lng,
+            "address": reverse_geocode(lat, lng),
             "why": "Covered & Close" if is_covered and total_minutes < 5 else "Best Value"
         })
 
@@ -213,11 +215,20 @@ if not df.empty:
         get_radius=100,
         pickable=True,
     )
+    user_df = pd.DataFrame([{"lat": user_lat, "lon": user_lng, "name": "📍 You are here"}])
+    user_layer = pdk.Layer(
+        "ScatterplotLayer",
+        user_df,
+        get_position=["lon", "lat"],
+        get_color=[30, 144, 255, 240], 
+        get_radius=150,
+        pickable=False,
+    )
     
     map_lat = df['lat'].mean()
     map_lng = df['lon'].mean()
     view_state = pdk.ViewState(latitude=map_lat, longitude=map_lng, zoom=14)
-    r = pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip={"text": "{name}\nScore: {score}\nCost: {cost}"})
+    r = pdk.Deck(layers=[layer,user_layer], initial_view_state=view_state, tooltip={"text": "{name}\nAddress: {address}\nScore: {score}\nCost: {cost}\nDrive: {drive_time}\nWalk: {walk_time}"})
     st.pydeck_chart(r)
 
 #Show Top Recommended
@@ -226,21 +237,27 @@ if not df.empty:
     # Show only top 5 unique spots
     top_5_df = df.head(5)
     for idx, (index, row) in enumerate(top_5_df.iterrows(), 1):
-        with st.expander(f"#{idx} - {row['name']} (Score: {row['score']})"):
+        with st.expander(f"#{idx} - {row['name']} 📍{row['address']} (Score: {row['score']})"):
+            st.write(f"**Address:** {row['address']}")
             st.write(f"**Cost**: {row['cost']}")
             st.write(f"**Drive Time**: {row['drive_time']}")
             st.write(f"**Walk Time**: {row['walk_time']}")
             st.write(f"**Total Trip Time**: {row['total_time']}")
             st.write(f"**Features**: {row['features']}")
             st.write(f"**Why**: {row['why']}")
-            if st.button("🅿️ Park Here", key=f"park_{index}"):
-                log_parking(st.session_state.user["id"], {
-                    "name": row["name"],
-                    "lat": row["lat"],
-                    "lon": row["lon"],
-                    "cost_per_hour": float(row["cost"].replace("$", "").replace("/hr", "")),
-                    "walk_time_minutes": float(row["walk_time"].replace(" min", "")),
-                })
-                st.success(f"✅ Parked at {row['name']}! This will improve your future recommendations.")
+            btn_col1, btn_col2, _ = st.columns([1, 1,3])
+            with btn_col1:
+                if st.button("🅿️ Park Here", key=f"park_{index}"):
+                    log_parking(st.session_state.user["id"], {
+                        "name": row["name"],
+                        "lat": row["lat"],
+                        "lon": row["lon"],
+                        "cost_per_hour": float(row["cost"].replace("$", "").replace("/hr", "")),
+                        "walk_time_minutes": float(row["walk_time"].replace(" min", "")),
+                    })
+                    st.success(f"✅ Parked at {row['name']}! This will improve your future recommendations.")
+            with btn_col2:
+                maps_url = f"https://www.google.com/maps/dir/?api=1&destination={row['lat']},{row['lon']}"
+                st.link_button("🗺️ Get Directions", maps_url)
 else:
     st.write("No spots match your criteria.")
