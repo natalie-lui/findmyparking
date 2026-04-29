@@ -14,6 +14,9 @@ A personalized parking recommendation engine that uses real-time context such as
 -   **Database**: Supabase (PostgreSQL + PostGIS).
 -   **External APIs**: OpenWeatherMap, Mapbox Directions.
 
+## Video Demo
+https://drive.google.com/drive/u/1/my-drive
+
 ## Installation & Setup
 
 ### 1. Prerequisites
