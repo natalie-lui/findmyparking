@@ -2,6 +2,9 @@
 
 A personalized parking recommendation engine that uses real-time context such as weather and traffic, and user preferences to suggest the best parking spots.
 
+## Checkout our app
+https://findmyparking.streamlit.app/
+
 ## Features
 -   **Personalized Ranking**: Uses cost, distance, availability, and user preferences to rank parking spots.
 -   **Real-time Context**: Integrates OpenWeatherMap (Rain detection) and Mapbox (Traffic) to adjust recommendations dynamically.
@@ -17,7 +20,7 @@ A personalized parking recommendation engine that uses real-time context such as
 ## Video Demo
 https://drive.google.com/drive/u/1/my-drive
 
-## Installation & Setup
+## Local Installation & Setup
 
 ### 1. Prerequisites
 -   [Python 3.9+](https://www.python.org/downloads/)
