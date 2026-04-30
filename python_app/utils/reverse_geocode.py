@@ -1,18 +1,24 @@
 import requests
-import os
 import streamlit as st
 
 def reverse_geocode(lat, lon):
-    GEOAPIFY_KEY = st.secrets["GEOAPIFY_API_KEY"]
     """Convert lat/lon to a human-readable address using Geoapify."""
     try:
-        url = f"https://api.geoapify.com/v1/geocode/reverse?lat={lat}&lon={lon}&apiKey={GEOAPIFY_KEY}"
+        api_key = st.secrets["GEOAPIFY_API_KEY"]  # ✅ inside function, inside try
+    except:
+        import os
+        api_key = os.getenv("GEOAPIFY_API_KEY")
+
+    if not api_key:
+        return "Address unavailable"
+
+    try:
+        url = f"https://api.geoapify.com/v1/geocode/reverse?lat={lat}&lon={lon}&apiKey={api_key}"
         resp = requests.get(url, timeout=5)
         data = resp.json()
         features = data.get("features", [])
         if features:
             props = features[0].get("properties", {})
-            # Build a short address: street number + street + city
             parts = [
                 props.get("housenumber", ""),
                 props.get("street", ""),
