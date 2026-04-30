@@ -19,11 +19,22 @@ st.set_page_config(page_title="FindMyParking", layout="wide")
 if "user" not in st.session_state:
     st.session_state.user = None
 if "user_lat" not in st.session_state:
-    st.session_state.user_lat = 33.6405  # fallback: UCI
+    st.session_state.user_lat = 33.6405
 if "user_lng" not in st.session_state:
     st.session_state.user_lng = -117.8443
 if "location_set" not in st.session_state:
     st.session_state.location_set = False
+
+# --- Read geolocation query params BEFORE login check ---
+params = st.query_params
+if "lat" in params and "lng" in params:
+    try:
+        st.session_state.user_lat = float(params["lat"])
+        st.session_state.user_lng = float(params["lng"])
+        st.session_state.location_set = True
+        st.query_params.clear()  # clean up URL without reloading
+    except:
+        pass
 
 # --- Login Page ---
 if not st.session_state.user:
@@ -45,6 +56,28 @@ if not st.session_state.user:
             else:
                 st.error(result["error"])
 
+    # Still inject geolocation JS on login page so coords are ready when they log in
+    if not st.session_state.location_set:
+        components.html("""
+            <script>
+            navigator.geolocation.getCurrentPosition(
+                function(pos) {
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+                    const url = new URL(window.parent.location.href);
+                    url.searchParams.set("lat", lat);
+                    url.searchParams.set("lng", lng);
+                    window.parent.history.replaceState({}, "", url);
+                    window.parent.location.reload();
+                },
+                function(err) {
+                    console.warn("Geolocation denied:", err.message);
+                },
+                { timeout: 5000 }
+            );
+            </script>
+        """, height=0)
+
     st.stop()
 
 # --- Logged in ---
@@ -60,7 +93,7 @@ supabase = get_supabase_client()
 st.sidebar.title("FindMyParking 🚗")
 st.sidebar.markdown("Personalized Parking Recommendations")
 
-# --- Browser Geolocation ---
+# --- Geolocation JS (only if not already set) ---
 if not st.session_state.location_set:
     components.html("""
         <script>
@@ -82,17 +115,6 @@ if not st.session_state.location_set:
         </script>
     """, height=0)
 
-    # Read coords injected by JS
-    params = st.query_params
-    if "lat" in params and "lng" in params:
-        try:
-            st.session_state.user_lat = float(params["lat"])
-            st.session_state.user_lng = float(params["lng"])
-            st.session_state.location_set = True
-            st.query_params.clear()
-        except:
-            pass
-
 # --- Location Sidebar ---
 st.sidebar.write("**📍 Your Location**")
 
@@ -111,7 +133,7 @@ if location_query:
             st.session_state.location_set = True
 
 with st.sidebar.expander("✏️ Adjust coordinates manually"):
-    col_a, col_b = st.sidebar.columns(2)
+    col_a, col_b = st.columns(2)
     st.session_state.user_lat = col_a.number_input("Lat", value=st.session_state.user_lat, format="%.4f", step=0.001)
     st.session_state.user_lng = col_b.number_input("Lng", value=st.session_state.user_lng, format="%.4f", step=0.001)
 
