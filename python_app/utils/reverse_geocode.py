@@ -1,7 +1,7 @@
 import requests
 import os
 
-GEOAPIFY_KEY = os.getenv("GEOAPIFY_API_KEY")
+GEOAPIFY_KEY = st.secrets["GEOAPIFY_API_KEY"]
 
 def reverse_geocode(lat, lon):
     """Convert lat/lon to a human-readable address using Geoapify."""

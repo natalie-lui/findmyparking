@@ -1,20 +1,29 @@
-import os
 import requests
+import streamlit as st
 
-GEOAPIFY_API_KEY = os.getenv("GEOAPIFY_API_KEY")
+def get_api_key():
+    try:
+        return st.secrets["GEOAPIFY_API_KEY"]
+    except:
+        import os
+        return os.getenv("GEOAPIFY_API_KEY")  # fallback for local dev
 
 def geocode_address(address, user_lat=None, user_lng=None):
     if not address:
         return []
 
+    api_key = get_api_key()
+    if not api_key:
+        st.error("Missing GEOAPIFY_API_KEY in secrets.")
+        return []
+
     url = "https://api.geoapify.com/v1/geocode/autocomplete"
     params = {
         "text": address,
-        "apiKey": GEOAPIFY_API_KEY,
+        "apiKey": api_key,
         "limit": 5
     }
 
-    # bias by proximity if available
     if user_lat and user_lng:
         params["bias"] = f"proximity:{user_lng},{user_lat}"
 
@@ -23,15 +32,15 @@ def geocode_address(address, user_lat=None, user_lng=None):
         resp.raise_for_status()
         data = resp.json()
     except Exception as e:
-        print("Geoapify error:", e)
+        st.error(f"Geocoding error: {e}")
         return []
 
     results = []
     for feature in data.get("features", []):
-        loc = feature.get("properties", {})
-        name = loc.get("formatted")
-        lat = loc.get("lat")
-        lon = loc.get("lon")
+        props = feature.get("properties", {})
+        name = props.get("formatted")
+        lat = props.get("lat")
+        lon = props.get("lon")
         if name and lat and lon:
             results.append({
                 "name": name,
@@ -39,7 +48,7 @@ def geocode_address(address, user_lat=None, user_lng=None):
                 "lng": lon
             })
 
-    # fallback: use current location
-    results.append({"name": "Use Current Location", "lat": user_lat, "lng": user_lng})
+    if user_lat and user_lng:
+        results.append({"name": "📍 Use Current Location", "lat": user_lat, "lng": user_lng})
 
     return results

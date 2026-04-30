@@ -1,10 +1,8 @@
 import os
 import requests
-from dotenv import load_dotenv
+import streamlit as st
 
-load_dotenv('.env.local')
-
-MAPBOX_ACCESS_TOKEN = os.environ.get("MAPBOX_ACCESS_TOKEN")
+MAPBOX_ACCESS_TOKEN = st.secrets["GEOAPIFY_API_KEY"]
 
 def get_travel_time(start_lat: float, start_lng: float, end_lat: float, end_lng: float):
     """
