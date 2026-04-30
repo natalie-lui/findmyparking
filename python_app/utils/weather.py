@@ -2,13 +2,13 @@ import os
 import requests
 import streamlit as st
 
-OPENWEATHER_API_KEY = st.secrets["OPENWEATHER_API_KEY"]
-
 def get_weather(lat: float, lon: float):
     """
     Fetches current weather data for the given coordinates.
     Returns a dict with condition, description, temp, and is_raining boolean.
     """
+    OPENWEATHER_API_KEY = st.secrets["OPENWEATHER_API_KEY"]
+
     if not OPENWEATHER_API_KEY:
         return {
             "condition": "Clear",

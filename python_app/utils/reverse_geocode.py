@@ -1,9 +1,9 @@
 import requests
 import os
-
-GEOAPIFY_KEY = st.secrets["GEOAPIFY_API_KEY"]
+import streamlit as st
 
 def reverse_geocode(lat, lon):
+    GEOAPIFY_KEY = st.secrets["GEOAPIFY_API_KEY"]
     """Convert lat/lon to a human-readable address using Geoapify."""
     try:
         url = f"https://api.geoapify.com/v1/geocode/reverse?lat={lat}&lon={lon}&apiKey={GEOAPIFY_KEY}"
