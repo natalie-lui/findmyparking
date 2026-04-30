@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import pydeck as pdk
 import requests
@@ -17,6 +18,12 @@ st.set_page_config(page_title="FindMyParking", layout="wide")
 # --- Session State ---
 if "user" not in st.session_state:
     st.session_state.user = None
+if "user_lat" not in st.session_state:
+    st.session_state.user_lat = 33.6405  # fallback: UCI
+if "user_lng" not in st.session_state:
+    st.session_state.user_lng = -117.8443
+if "location_set" not in st.session_state:
+    st.session_state.location_set = False
 
 # --- Login Page ---
 if not st.session_state.user:
@@ -40,35 +47,84 @@ if not st.session_state.user:
 
     st.stop()
 
-# --- Logged in: show user in sidebar ---
-st.sidebar.success(f"👤 {st.session_state.user.email}")  # ✅ dot notation
+# --- Logged in ---
+st.sidebar.success(f"👤 {st.session_state.user.email}")
 if st.sidebar.button("Sign Out"):
     st.session_state.user = None
     st.rerun()
 
 st.sidebar.divider()
 
-# Initialize Supabase
 supabase = get_supabase_client()
 
 st.sidebar.title("FindMyParking 🚗")
 st.sidebar.markdown("Personalized Parking Recommendations")
 
-# Detect User Location
-def get_user_location():
-    try:
-        resp = requests.get("https://ipinfo.io/json")
-        data = resp.json()
-        loc = data["loc"].split(",")
-        return float(loc[0]), float(loc[1])
-    except:
-        return 33.6405, -117.8443  # fallback: UCI
+# --- Browser Geolocation ---
+if not st.session_state.location_set:
+    components.html("""
+        <script>
+        navigator.geolocation.getCurrentPosition(
+            function(pos) {
+                const lat = pos.coords.latitude;
+                const lng = pos.coords.longitude;
+                const url = new URL(window.parent.location.href);
+                url.searchParams.set("lat", lat);
+                url.searchParams.set("lng", lng);
+                window.parent.history.replaceState({}, "", url);
+                window.parent.location.reload();
+            },
+            function(err) {
+                console.warn("Geolocation denied:", err.message);
+            },
+            { timeout: 5000 }
+        );
+        </script>
+    """, height=0)
 
-user_lat, user_lng = get_user_location()
-st.sidebar.write(f"**Current Location:** ({user_lat}, {user_lng})")
+    # Read coords injected by JS
+    params = st.query_params
+    if "lat" in params and "lng" in params:
+        try:
+            st.session_state.user_lat = float(params["lat"])
+            st.session_state.user_lng = float(params["lng"])
+            st.session_state.location_set = True
+            st.query_params.clear()
+        except:
+            pass
 
-# Input Destination
-st.sidebar.write("Your Destination")
+# --- Location Sidebar ---
+st.sidebar.write("**📍 Your Location**")
+
+location_query = st.sidebar.text_input("Search your location:", placeholder="e.g. Irvine, CA")
+if location_query:
+    loc_suggestions = geocode_address(location_query, st.session_state.user_lat, st.session_state.user_lng)
+    if loc_suggestions:
+        loc_selected = st.sidebar.selectbox(
+            "Select your location",
+            options=loc_suggestions,
+            format_func=lambda x: x["name"]
+        )
+        if loc_selected and loc_selected["name"] != "📍 Use Current Location":
+            st.session_state.user_lat = loc_selected["lat"]
+            st.session_state.user_lng = loc_selected["lng"]
+            st.session_state.location_set = True
+
+with st.sidebar.expander("✏️ Adjust coordinates manually"):
+    col_a, col_b = st.sidebar.columns(2)
+    st.session_state.user_lat = col_a.number_input("Lat", value=st.session_state.user_lat, format="%.4f", step=0.001)
+    st.session_state.user_lng = col_b.number_input("Lng", value=st.session_state.user_lng, format="%.4f", step=0.001)
+
+user_lat = st.session_state.user_lat
+user_lng = st.session_state.user_lng
+
+label = "✅ Auto-detected" if st.session_state.location_set else "⚠️ Default (UCI) — allow location or search above"
+st.sidebar.caption(f"{label}: ({user_lat:.4f}, {user_lng:.4f})")
+
+st.sidebar.divider()
+
+# --- Destination ---
+st.sidebar.write("**🗺️ Your Destination**")
 dest_query = st.sidebar.text_input("Enter destination:", placeholder="e.g. UCI Student Center")
 
 destination = None
@@ -87,18 +143,20 @@ if dest_query:
             destination = selected
             st.sidebar.success(f"Destination: {selected['name']}")
 
-# User Preferences
+# --- User Preferences ---
+st.sidebar.divider()
 max_cost = st.sidebar.slider("Max Cost per Hour ($)", 0.0, 10.0, 5.0, 0.5)
 pref_covered = st.sidebar.checkbox("Prefer Covered Parking")
 pref_accessible = st.sidebar.checkbox("Prefer Accessible Parking")
 
+# --- Weather ---
 weather = get_weather(user_lat, user_lng)
 
 col1, col2, col3 = st.columns(3)
 col1.metric("Weather", f"{weather['condition']}", f"{weather['temp']}°C")
 col2.metric("Rain Status", "Raining" if weather['is_raining'] else "Clear")
 
-# Get parking spots
+# --- Get Parking Spots ---
 center_lat, center_lng = (dest_lat, dest_lng) if destination else (user_lat, user_lng)
 with st.spinner("Finding nearby parking spots..."):
     spots = get_parking_spots_near(center_lat, center_lng)
@@ -108,14 +166,13 @@ if not spots:
     st.warning("No parking spots found nearby.")
     st.stop()
 
-# Default destination offset if not selected
 if dest_lat is None or dest_lng is None:
     dest_lat, dest_lng = user_lat + 0.01, user_lng + 0.01
 
 ranked_spots = []
 
-# Fetch user history for personalized ranking
-history = get_user_history(st.session_state.user.id)  # ✅ dot notation
+# --- Personalized Ranking ---
+history = get_user_history(st.session_state.user.id)
 previously_used = {h["spot_name"] for h in history}
 avg_cost = sum(h["cost_per_hour"] for h in history) / len(history) if history else None
 avg_walk = sum(h["walk_time_minutes"] for h in history) / len(history) if history else None
@@ -186,7 +243,7 @@ df = pd.DataFrame(ranked_spots)
 if not df.empty:
     df = df.sort_values(by="score", ascending=False)
 
-# Show Map
+# --- Map ---
 st.subheader("Parking Map")
 if not df.empty:
     df['color'] = [[255, 0, 0, 160]] * len(df)
@@ -212,9 +269,10 @@ if not df.empty:
         pickable=False,
     )
 
-    map_lat = df['lat'].mean()
-    map_lng = df['lon'].mean()
-    view_state = pdk.ViewState(latitude=map_lat, longitude=map_lng, zoom=14)
+    center_lat_map = dest_lat if dest_lat else df['lat'].mean()
+    center_lng_map = dest_lng if dest_lng else df['lon'].mean()
+
+    view_state = pdk.ViewState(latitude=center_lat_map, longitude=center_lng_map, zoom=14)
     r = pdk.Deck(
         layers=[layer, user_layer],
         initial_view_state=view_state,
@@ -222,7 +280,7 @@ if not df.empty:
     )
     st.pydeck_chart(r)
 
-# Show Top Recommended
+# --- Recommended Spots ---
 st.subheader("Recommended Spots")
 if not df.empty:
     top_5_df = df.head(5)
@@ -238,7 +296,7 @@ if not df.empty:
             btn_col1, btn_col2, _ = st.columns([1, 1, 3])
             with btn_col1:
                 if st.button("🅿️ Park Here", key=f"park_{index}"):
-                    log_parking(st.session_state.user.id, {  # ✅ dot notation
+                    log_parking(st.session_state.user.id, {
                         "name": row["name"],
                         "lat": row["lat"],
                         "lon": row["lon"],
