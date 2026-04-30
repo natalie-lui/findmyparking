@@ -1,15 +1,8 @@
-import os
+# utils/supabase_client.py
+import streamlit as st
 from supabase import create_client, Client
-from dotenv import load_dotenv
-
-
-load_dotenv()
-
-url: str = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-key: str = os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
-
-if not url or not key:
-    print("Warning: Supabase credentials not found in environment variables.")
 
 def get_supabase_client() -> Client:
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
     return create_client(url, key)

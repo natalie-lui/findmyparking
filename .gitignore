@@ -8,3 +8,5 @@ env/
 venv/
 ENV/
 .DS_Store
+streamlit/
+secrets.toml

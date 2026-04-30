@@ -1,7 +1,5 @@
 import streamlit as st
 import pandas as pd
-import struct
-import binascii
 import pydeck as pdk
 import requests
 from utils.supabase_client import get_supabase_client
@@ -26,24 +24,24 @@ if not st.session_state.user:
     st.write("Sign in to get personalized parking recommendations.")
 
     mode = st.radio("", ["Sign In", "Sign Up"], horizontal=True)
-    username = st.text_input("Username")
+    email = st.text_input("Email")
     password = st.text_input("Password", type="password")
 
     if st.button(mode, type="primary"):
-        if not username or not password:
+        if not email or not password:
             st.error("Please fill in both fields.")
         else:
-            result = sign_in(username, password) if mode == "Sign In" else sign_up(username, password)
+            result = sign_in(email, password) if mode == "Sign In" else sign_up(email, password)
             if result["success"]:
                 st.session_state.user = result["user"]
                 st.rerun()
             else:
                 st.error(result["error"])
 
-    st.stop()  # Don't render the map until logged in
+    st.stop()
 
 # --- Logged in: show user in sidebar ---
-st.sidebar.success(f"👤 {st.session_state.user['email']}")
+st.sidebar.success(f"👤 {st.session_state.user.email}")  # ✅ dot notation
 if st.sidebar.button("Sign Out"):
     st.session_state.user = None
     st.rerun()
@@ -56,10 +54,10 @@ supabase = get_supabase_client()
 st.sidebar.title("FindMyParking 🚗")
 st.sidebar.markdown("Personalized Parking Recommendations")
 
-#Detect User Location
+# Detect User Location
 def get_user_location():
     try:
-        resp = requests.get("https://ipinfo.io/json") #get location from ipaddress
+        resp = requests.get("https://ipinfo.io/json")
         data = resp.json()
         loc = data["loc"].split(",")
         return float(loc[0]), float(loc[1])
@@ -67,12 +65,10 @@ def get_user_location():
         return 33.6405, -117.8443  # fallback: UCI
 
 user_lat, user_lng = get_user_location()
-
 st.sidebar.write(f"**Current Location:** ({user_lat}, {user_lng})")
 
 # Input Destination
 st.sidebar.write("Your Destination")
-
 dest_query = st.sidebar.text_input("Enter destination:", placeholder="e.g. UCI Student Center")
 
 destination = None
@@ -80,9 +76,7 @@ dest_lat = None
 dest_lng = None
 
 if dest_query:
-    # fetch suggestions every time input changes
     suggestions = geocode_address(dest_query, user_lat, user_lng)
-
     if suggestions:
         selected = st.sidebar.selectbox(
             "Select destination", options=suggestions, format_func=lambda x: x["name"]
@@ -93,12 +87,10 @@ if dest_query:
             destination = selected
             st.sidebar.success(f"Destination: {selected['name']}")
 
-#User Preferences
+# User Preferences
 max_cost = st.sidebar.slider("Max Cost per Hour ($)", 0.0, 10.0, 5.0, 0.5)
 pref_covered = st.sidebar.checkbox("Prefer Covered Parking")
 pref_accessible = st.sidebar.checkbox("Prefer Accessible Parking")
-
-
 
 weather = get_weather(user_lat, user_lng)
 
@@ -106,26 +98,24 @@ col1, col2, col3 = st.columns(3)
 col1.metric("Weather", f"{weather['condition']}", f"{weather['temp']}°C")
 col2.metric("Rain Status", "Raining" if weather['is_raining'] else "Clear")
 
-
-#get parking spots
-center_lat, center_lng = (dest_lat, dest_lng) if destination else (user_lat, user_lng) #center location around destination
+# Get parking spots
+center_lat, center_lng = (dest_lat, dest_lng) if destination else (user_lat, user_lng)
 with st.spinner("Finding nearby parking spots..."):
     spots = get_parking_spots_near(center_lat, center_lng)
-    MAX_SPOTS = 10
-    spots = spots[:MAX_SPOTS] #limit amount of spots
+    spots = spots[:10]
 
 if not spots:
     st.warning("No parking spots found nearby.")
     st.stop()
 
-# Ranking Algorithm
-#stop ranking if destination not selected
+# Default destination offset if not selected
 if dest_lat is None or dest_lng is None:
-    dest_lat, dest_lng = user_lat + 0.01, user_lng + 0.01 #default destination if not selected, slightly offset from current location
+    dest_lat, dest_lng = user_lat + 0.01, user_lng + 0.01
+
 ranked_spots = []
 
 # Fetch user history for personalized ranking
-history = get_user_history(st.session_state.user["id"])
+history = get_user_history(st.session_state.user.id)  # ✅ dot notation
 previously_used = {h["spot_name"] for h in history}
 avg_cost = sum(h["cost_per_hour"] for h in history) / len(history) if history else None
 avg_walk = sum(h["walk_time_minutes"] for h in history) / len(history) if history else None
@@ -134,49 +124,47 @@ with st.spinner(f"Ranking {len(spots)} spots..."):
     for spot in spots:
         lng = spot['lon']
         lat = spot['lat']
-        
-        if lat is None or lng is None:
-            lat, lng = user_lat + 0.001, user_lng + 0.001 
 
-        #calculate travel times
-        #curr -> parking
+        if lat is None or lng is None:
+            lat, lng = user_lat + 0.001, user_lng + 0.001
+
         traffic_to_spot = get_travel_time(user_lat, user_lng, lat, lng)
         duration_to_spot = traffic_to_spot['duration'] if traffic_to_spot else 0
 
-        #parking -> destination
         traffic_to_dest = get_travel_time(lat, lng, dest_lat, dest_lng)
         duration_to_dest = traffic_to_dest['duration'] if traffic_to_dest else 0
 
-        #convert time
         drive_minutes = duration_to_spot / 60
         walk_minutes = duration_to_dest / 60
         total_minutes = drive_minutes + walk_minutes
 
-        score = 70 # base score
-        
+        score = 70
         score -= drive_minutes * 1.2
-        score -= walk_minutes * 2.5 #walking = penalized heavier
-        
-        cost = spot['cost_per_hour'] #cost
+        score -= walk_minutes * 2.5
+
+        cost = spot['cost_per_hour']
         score -= cost * 2
-        if cost < 3: score += 5
-        
-        features = spot.get('features', []) # weather
+        if cost < 3:
+            score += 5
+
+        features = spot.get('features', [])
         is_covered = "Covered" in features
-        
+
         if weather['is_raining']:
-            if is_covered: score += 30
-            else: score -= 20
-            
+            if is_covered:
+                score += 30
+            else:
+                score -= 20
+
         if pref_covered and not is_covered:
-            continue # Skip uncovered spots if preference is set
+            continue
         if cost > max_cost:
-            continue # Skip spots that are too expensive
-        
+            continue
+
         if spot['name'] in previously_used:
-            score += 15 # boost spots user has parked at before
+            score += 15
         if avg_cost is not None:
-            score -= abs(cost - avg_cost) * 1.5 # penalize if price is far from average cost
+            score -= abs(cost - avg_cost) * 1.5
         if avg_walk is not None:
             score -= abs(walk_minutes - avg_walk) * 1.0
 
@@ -194,19 +182,18 @@ with st.spinner(f"Ranking {len(spots)} spots..."):
             "why": "Covered & Close" if is_covered and total_minutes < 5 else "Best Value"
         })
 
-#sorting
 df = pd.DataFrame(ranked_spots)
 if not df.empty:
     df = df.sort_values(by="score", ascending=False)
 
-#Show Map
+# Show Map
 st.subheader("Parking Map")
 if not df.empty:
     df['color'] = [[255, 0, 0, 160]] * len(df)
-    df.at[df.index[0], 'color'] = [0, 255, 0, 200] 
+    df.at[df.index[0], 'color'] = [0, 255, 0, 200]
 
-    df_map = df.head(20) #only render 20
-    
+    df_map = df.head(20)
+
     layer = pdk.Layer(
         "ScatterplotLayer",
         df_map,
@@ -220,21 +207,24 @@ if not df.empty:
         "ScatterplotLayer",
         user_df,
         get_position=["lon", "lat"],
-        get_color=[30, 144, 255, 240], 
+        get_color=[30, 144, 255, 240],
         get_radius=150,
         pickable=False,
     )
-    
+
     map_lat = df['lat'].mean()
     map_lng = df['lon'].mean()
     view_state = pdk.ViewState(latitude=map_lat, longitude=map_lng, zoom=14)
-    r = pdk.Deck(layers=[layer,user_layer], initial_view_state=view_state, tooltip={"text": "{name}\nAddress: {address}\nScore: {score}\nCost: {cost}\nDrive: {drive_time}\nWalk: {walk_time}"})
+    r = pdk.Deck(
+        layers=[layer, user_layer],
+        initial_view_state=view_state,
+        tooltip={"text": "{name}\nAddress: {address}\nScore: {score}\nCost: {cost}\nDrive: {drive_time}\nWalk: {walk_time}"}
+    )
     st.pydeck_chart(r)
 
-#Show Top Recommended
+# Show Top Recommended
 st.subheader("Recommended Spots")
 if not df.empty:
-    # Show only top 5 unique spots
     top_5_df = df.head(5)
     for idx, (index, row) in enumerate(top_5_df.iterrows(), 1):
         with st.expander(f"#{idx} - {row['name']} 📍{row['address']} (Score: {row['score']})"):
@@ -245,10 +235,10 @@ if not df.empty:
             st.write(f"**Total Trip Time**: {row['total_time']}")
             st.write(f"**Features**: {row['features']}")
             st.write(f"**Why**: {row['why']}")
-            btn_col1, btn_col2, _ = st.columns([1, 1,3])
+            btn_col1, btn_col2, _ = st.columns([1, 1, 3])
             with btn_col1:
                 if st.button("🅿️ Park Here", key=f"park_{index}"):
-                    log_parking(st.session_state.user["id"], {
+                    log_parking(st.session_state.user.id, {  # ✅ dot notation
                         "name": row["name"],
                         "lat": row["lat"],
                         "lon": row["lon"],
